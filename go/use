@@ -1,0 +1,5 @@
+mkdir sbcheckstats
+cd sbcheckstats
+go mod init sbcheckstats
+go mod tidy
+go run main.go
