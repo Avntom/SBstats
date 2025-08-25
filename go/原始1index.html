@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>流量监控面板</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        .section {
+            margin-bottom: 40px;
+        }
+        .section h2 {
+            color: #555;
+            border-bottom: 2px solid #ddd;
+            padding-bottom: 10px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background-color: white;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #f8f8f8;
+            font-weight: bold;
+        }
+        tr:hover {
+            background-color: #f1f1f1;
+        }
+        .total {
+            font-weight: bold;
+            background-color: #e9e9e9;
+        }
+        button {
+            display: block;
+            margin: 20px auto;
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .bytes-to-human {
+            text-align: right;
+        }
+    </style>
+</head>
+<body>
+    <h1>流量监控面板</h1>
+    
+    <button id="refreshBtn">刷新数据</button>
+    
+    <div class="section" id="usersSection">
+        <h2>用户流量统计</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>用户</th>
+                    <th>上传 (Uplink)</th>
+                    <th>下载 (Downlink)</th>
+                    <th>综合流量</th>
+                </tr>
+            </thead>
+            <tbody id="usersTableBody">
+                <!-- 数据将动态插入 -->
+            </tbody>
+        </table>
+    </div>
+    
+    <div class="section" id="outboundsSection">
+        <h2>出站流量统计</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>出站名称</th>
+                    <th>上传 (Uplink)</th>
+                    <th>下载 (Downlink)</th>
+                    <th>综合流量</th>
+                </tr>
+            </thead>
+            <tbody id="outboundsTableBody">
+                <!-- 数据将动态插入 -->
+            </tbody>
+        </table>
+    </div>
+    
+    <div class="section" id="inboundsSection">
+        <h2>入站流量统计</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>入站名称</th>
+                    <th>上传 (Uplink)</th>
+                    <th>下载 (Downlink)</th>
+                    <th>综合流量</th>
+                </tr>
+            </thead>
+            <tbody id="inboundsTableBody">
+                <!-- 数据将动态插入 -->
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        // 假设后端API端点，返回JSON格式的流量数据
+        // 示例后端响应: { "stats": [{ "name": "outbound>>>出站1>>>traffic>>>uplink", "value": 136422 }, ...] }
+        const API_URL = '/api/stats';  // 需替换为实际后端API地址
+
+        // 字节转换为人类可读格式 (如 KB, MB, GB)
+        function bytesToHuman(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // 解析并分组数据
+        function parseStats(data) {
+            const users = {};
+            const outbounds = {};
+            const inbounds = {};
+
+            data.stats.forEach(stat => {
+                const parts = stat.name.split('>>>');
+                if (parts.length !== 4) return;
+
+                const type = parts[0];
+                const name = parts[1];
+                const traffic = parts[2];
+                const direction = parts[3];
+
+                if (traffic !== 'traffic') return;
+
+                let group;
+                if (type === 'usr') group = users;
+                else if (type === 'outbound') group = outbounds;
+                else if (type === 'inbound') group = inbounds;
+                else return;
+
+                if (!group[name]) {
+                    group[name] = { uplink: 0, downlink: 0 };
+                }
+
+                if (direction === 'uplink') {
+                    group[name].uplink = stat.value;
+                } else if (direction === 'downlink') {
+                    group[name].downlink = stat.value;
+                }
+            });
+
+            return { users, outbounds, inbounds };
+        }
+
+        // 渲染表格
+        function renderTable(bodyId, data) {
+            const tbody = document.getElementById(bodyId);
+            tbody.innerHTML = '';
+
+            let totalUplink = 0;
+            let totalDownlink = 0;
+
+            Object.keys(data).forEach(name => {
+                const item = data[name];
+                const total = item.uplink + item.downlink;
+                totalUplink += item.uplink;
+                totalDownlink += item.downlink;
+
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${name}</td>
+                    <td class="bytes-to-human">${bytesToHuman(item.uplink)}</td>
+                    <td class="bytes-to-human">${bytesToHuman(item.downlink)}</td>
+                    <td class="bytes-to-human">${bytesToHuman(total)}</td>
+                `;
+                tbody.appendChild(row);
+            });
+
+            // 添加总计行
+            const totalRow = document.createElement('tr');
+            totalRow.classList.add('total');
+            const totalTotal = totalUplink + totalDownlink;
+            totalRow.innerHTML = `
+                <td>总计</td>
+                <td class="bytes-to-human">${bytesToHuman(totalUplink)}</td>
+                <td class="bytes-to-human">${bytesToHuman(totalDownlink)}</td>
+                <td class="bytes-to-human">${bytesToHuman(totalTotal)}</td>
+            `;
+            tbody.appendChild(totalRow);
+        }
+
+        // 获取并刷新数据
+        async function fetchData() {
+            try {
+                const response = await fetch(API_URL);
+                const data = await response.json();
+                const grouped = parseStats(data);
+
+                renderTable('usersTableBody', grouped.users);
+                renderTable('outboundsTableBody', grouped.outbounds);
+                renderTable('inboundsTableBody', grouped.inbounds);
+            } catch (error) {
+                console.error('获取数据失败:', error);
+                alert('无法加载流量数据，请检查后端服务。');
+            }
+        }
+
+        // 初始加载
+        fetchData();
+
+        // 刷新按钮
+        document.getElementById('refreshBtn').addEventListener('click', fetchData);
+    </script>
+</body>
+</html>
